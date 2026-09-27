@@ -15,16 +15,20 @@ find_package(OpenGL REQUIRED)
 # GLFW instalado con: brew install glfw
 # En Apple Silicon Homebrew vive en /opt/homebrew, no en /usr/local.
 find_package(glfw3 3.3 REQUIRED)
+find_package(glm REQUIRED)
+
 
 add_executable(prueba_opengl triangulo.cpp)
 
 target_link_libraries(prueba_opengl
     PRIVATE
         glfw
+          glm::glm
         OpenGL::GL
         "-framework Cocoa"
         "-framework IOKit"
         "-framework CoreVideo"
+
 )
 
 # Avisos utiles, no obligatorios.
