@@ -32,91 +32,12 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "texturas/stb_image.h"
 
-// ---------------------------------------------------------------------------
-// Shaders
-// ---------------------------------------------------------------------------
-
-// Shader de modelos solidos sin textura. Lleva la posicion de mundo al
-// fragment shader para una iluminacion "falsa" sin normales.
-const char* colorVertexSrc =
-"#version 330 core\n"
-"layout (location=0) in vec3 aPos;\n"
-"uniform mat4 model;\n"
-"uniform mat4 view;\n"
-"uniform mat4 projection;\n"
-"out vec3 vWorldPos;\n"
-"void main(){\n"
-"    vec4 world = model * vec4(aPos, 1.0);\n"
-"    vWorldPos = world.xyz;\n"
-"    gl_Position = projection * view * world;\n"
-"}\0";
-
-// Iluminacion exterior "falsa": luz de dia pareja (sol alto), con una
-// variacion suave segun la altura (lo que esta mas arriba, mas iluminado;
-// lo que esta mas abajo, un poco mas en sombra) para dar algo de volumen
-// sin tener normales reales.
-const char* colorFragmentSrc =
-"#version 330 core\n"
-"in vec3 vWorldPos;\n"
-"out vec4 FragColor;\n"
-"uniform vec3 uColor;\n"
-"void main(){\n"
-"    float luz = clamp(0.78 + vWorldPos.y * 0.015, 0.55, 1.15);\n"
-"    vec3 color = uColor * luz;\n"
-"    FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);\n"
-"}\0";
-
-// Shader de modelos con textura (misma iluminacion exterior de arriba).
-const char* texVertexSrc =
-"#version 330 core\n"
-"layout (location=0) in vec3 aPos;\n"
-"layout (location=1) in vec2 aUV;\n"
-"uniform mat4 model;\n"
-"uniform mat4 view;\n"
-"uniform mat4 projection;\n"
-"out vec2 vUV;\n"
-"out vec3 vWorldPos;\n"
-"void main(){\n"
-"    vec4 world = model * vec4(aPos, 1.0);\n"
-"    vWorldPos = world.xyz;\n"
-"    gl_Position = projection * view * world;\n"
-"    vUV = aUV;\n"
-"}\0";
-
-const char* texFragmentSrc =
-"#version 330 core\n"
-"in vec2 vUV;\n"
-"in vec3 vWorldPos;\n"
-"out vec4 FragColor;\n"
-"uniform sampler2D uTex;\n"
-"void main(){\n"
-"    float luz = clamp(0.78 + vWorldPos.y * 0.015, 0.55, 1.15);\n"
-"    vec4 tex = texture(uTex, vUV);\n"
-"    if (tex.a < 0.05) discard;\n"
-"    FragColor = vec4(clamp(tex.rgb * luz, 0.0, 1.0), tex.a);\n"
-"}\0";
-
-static void checkShaderCompile(GLuint shader, const char* name) {
-    int success; char infoLog[512];
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (!success) { glGetShaderInfoLog(shader, 512, NULL, infoLog); std::cout << "Error compilando shader (" << name << "):\n" << infoLog << std::endl; }
-}
-static void checkProgramLink(GLuint program) {
-    int success; char infoLog[512];
-    glGetProgramiv(program, GL_LINK_STATUS, &success);
-    if (!success) { glGetProgramInfoLog(program, 512, NULL, infoLog); std::cout << "Error linkeando programa:\n" << infoLog << std::endl; }
-}
-static GLuint buildProgram(const char* vsSrc, const char* fsSrc, const char* name) {
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &vsSrc, NULL); glCompileShader(vs); checkShaderCompile(vs, name);
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs, 1, &fsSrc, NULL); glCompileShader(fs); checkShaderCompile(fs, name);
-    GLuint program = glCreateProgram();
-    glAttachShader(program, vs); glAttachShader(program, fs); glLinkProgram(program);
-    checkProgramLink(program);
-    glDeleteShader(vs); glDeleteShader(fs);
-    return program;
-}
+// Los shaders ya no van como strings aqui adentro: el codigo GLSL vive en
+// archivos aparte dentro de shaders/ (color.vert, color.frag, textura.vert,
+// textura.frag), y la clase Shader (libs/Shader.h) se encarga de leerlos,
+// compilarlos y linkearlos. Asi quedan "por clases", como pidio el profe,
+// en vez de un monton de strings sueltos en medio de main().
+#include "libs/Shader.h"
 
 static void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     (void)window; glViewport(0, 0, width, height);
@@ -126,7 +47,7 @@ static void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 // Camara libre: mouse mueve la vista, WASD mueve la posicion, y ADEMAS las
 // flechas del teclado tambien rotan la vista (igual que el mouse, para
 // quien prefiera no usarlo).
-// ---------------------------------------------------------------------------
+
 glm::vec3 camPos(0.0f, 2.2f, 11.0f);
 glm::vec3 camFront(0.0f, 0.0f, -1.0f);
 glm::vec3 camUp(0.0f, 1.0f, 0.0f);
@@ -374,19 +295,20 @@ static bool loadGltfScene(const char* path, GltfScene& out, std::map<std::string
 // Dibuja todas las piezas de una escena con la misma matriz "model" (las
 // posiciones de cada pieza ya estan en el espacio local del archivo glTF,
 // por eso una sola matriz de ubicacion/escala alcanza para todo el modelo).
+// Recibe los dos shaders ya armados (color y textura) y elige cual usar
+// pieza por pieza, segun si esa pieza tiene textura o no.
 static void dibujarGltfScene(const GltfScene& scene, const glm::mat4& model,
-                              GLuint colorProgram, GLint cModelLoc, GLint cColorLoc,
-                              GLuint texProgram, GLint tModelLoc) {
+                              const Shader& shaderColor, const Shader& shaderTextura) {
     for (auto& part : scene.parts) {
         if (part.hasTexture) {
-            glUseProgram(texProgram);
-            glUniformMatrix4fv(tModelLoc, 1, GL_FALSE, glm::value_ptr(model));
+            shaderTextura.usar();
+            shaderTextura.setMat4("model", model);
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, part.texture);
         } else {
-            glUseProgram(colorProgram);
-            glUniformMatrix4fv(cModelLoc, 1, GL_FALSE, glm::value_ptr(model));
-            glUniform3fv(cColorLoc, 1, glm::value_ptr(part.colorFallback));
+            shaderColor.usar();
+            shaderColor.setMat4("model", model);
+            shaderColor.setVec3("uColor", part.colorFallback);
         }
         glBindVertexArray(part.vao);
         glDrawElements(GL_TRIANGLES, part.indexCount, GL_UNSIGNED_INT, 0);
@@ -419,16 +341,10 @@ int main() {
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glEnable(GL_DEPTH_TEST);
 
-    GLuint colorProgram = buildProgram(colorVertexSrc, colorFragmentSrc, "COLOR");
-    GLint cModelLoc = glGetUniformLocation(colorProgram, "model");
-    GLint cViewLoc = glGetUniformLocation(colorProgram, "view");
-    GLint cProjLoc = glGetUniformLocation(colorProgram, "projection");
-    GLint cColorLoc = glGetUniformLocation(colorProgram, "uColor");
-
-    GLuint texProgram = buildProgram(texVertexSrc, texFragmentSrc, "TEXTURA");
-    GLint tModelLoc = glGetUniformLocation(texProgram, "model");
-    GLint tViewLoc = glGetUniformLocation(texProgram, "view");
-    GLint tProjLoc = glGetUniformLocation(texProgram, "projection");
+    // Un objeto Shader por cada par vertex/fragment: uno para piezas sin
+    // textura (color plano) y otro para piezas con textura.
+    Shader shaderColor("shaders/color.vert", "shaders/color.frag");
+    Shader shaderTextura("shaders/textura.vert", "shaders/textura.frag");
 
     std::map<std::string, GLuint> texCache;
 
@@ -507,15 +423,15 @@ int main() {
         glClearColor(0.55f, 0.80f, 0.94f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glUseProgram(colorProgram);
-        glUniformMatrix4fv(cViewLoc, 1, GL_FALSE, glm::value_ptr(view));
-        glUniformMatrix4fv(cProjLoc, 1, GL_FALSE, glm::value_ptr(projection));
-        glUseProgram(texProgram);
-        glUniformMatrix4fv(tViewLoc, 1, GL_FALSE, glm::value_ptr(view));
-        glUniformMatrix4fv(tProjLoc, 1, GL_FALSE, glm::value_ptr(projection));
+        shaderColor.usar();
+        shaderColor.setMat4("view", view);
+        shaderColor.setMat4("projection", projection);
+        shaderTextura.usar();
+        shaderTextura.setMat4("view", view);
+        shaderTextura.setMat4("projection", projection);
 
         // isla/playa
-        if (okIsla) dibujarGltfScene(isla, islaModel, colorProgram, cModelLoc, cColorLoc, texProgram, tModelLoc);
+        if (okIsla) dibujarGltfScene(isla, islaModel, shaderColor, shaderTextura);
 
         // flamenco: avanza por la curva de Bezier (ida y vuelta)
         if (okFlamenco) {
@@ -535,7 +451,7 @@ int main() {
                                      * glm::rotate(glm::mat4(1.0f), glm::radians(anguloVuelo), glm::vec3(0,1,0))
                                      * glm::scale(glm::mat4(1.0f), glm::vec3(flamencoEscala))
                                      * glm::translate(glm::mat4(1.0f), -flamencoAncla);
-            dibujarGltfScene(flamenco, flamencoModel, colorProgram, cModelLoc, cColorLoc, texProgram, tModelLoc);
+            dibujarGltfScene(flamenco, flamencoModel, shaderColor, shaderTextura);
         }
 
         // persona: rota sobre su propio eje, parada en la playa
@@ -545,7 +461,7 @@ int main() {
                                      * glm::rotate(glm::mat4(1.0f), glm::radians(personaAngulo), glm::vec3(0,1,0))
                                      * glm::scale(glm::mat4(1.0f), glm::vec3(personaEscala))
                                      * glm::translate(glm::mat4(1.0f), -personaAncla);
-            dibujarGltfScene(persona, personaModel, colorProgram, cModelLoc, cColorLoc, texProgram, tModelLoc);
+            dibujarGltfScene(persona, personaModel, shaderColor, shaderTextura);
         }
 
         glfwSwapBuffers(window);
