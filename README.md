@@ -28,11 +28,9 @@ persona. A cada uno le aplique un tema distinto visto en clase:
 ## Arquitectura 
 
 galeria.cpp
-├── 1. Shaders (el código GLSL, como strings de texto en C++)
-│   ├── shader "color": para piezas sin textura
-│   └── shader "textura": para piezas con imagen (arena, agua, piel...)
-     libs/Shader.h-> clase que carga/compila/linkea shaders desde archivo
-    shaders/ -> codigo GLSL de los shaders (color y textura)
+├── 1. Shaders (clase Shader en libs/Shader.h + archivos .vert/.frag en shaders/)
+│   ├── shaders/color.vert + shaders/color.frag: para piezas sin textura
+│   └── shaders/textura.vert + shaders/textura.frag: para piezas con imagen
 ├── 2. Cámara libre
 │   ├── variables de posición/ángulos (yaw, pitch)
 │   ├── callback del mouse (mueve la vista)
@@ -54,12 +52,18 @@ GLFW, pedir un contexto de OpenGL 3.3 "core", y activar el detector de
 profundidad (`GL_DEPTH_TEST`) para que las cosas se dibujen en el orden
 correcto (que lo de adelante tape lo de atrás).
 
-**2. Los shaders.** Son dos pares (vertex + fragment): uno para dibujar
-superficies con color plano y otro para superficies con textura. Los dos usan
-una **iluminación falsa**: no hay luces ni normales de verdad calculadas,
-solo un truco donde entre más alto (coordenada Y) está un punto, un poco más
-iluminado se ve. Es suficiente para que la escena no se vea toda plana, sin
-tener que montar un sistema de luces completo.
+**2. Los shaders.** El código GLSL ya no está como texto dentro de
+`galeria.cpp`: vive en archivos aparte dentro de `shaders/`
+(`color.vert`, `color.frag`, `textura.vert`, `textura.frag`). Para
+cargarlos hice una clase `Shader` (`libs/Shader.h`) que lee esos archivos,
+le pide a OpenGL que los compile y los linkee, y deja métodos listos para
+usar (`usar()`, `setMat4()`, `setVec3()`) en vez de repetir
+`glGetUniformLocation` por todos lados. Hay dos shaders: uno de color plano
+(para piezas sin textura) y otro de textura (para piezas con imagen). Los
+dos usan una **iluminación falsa**: no hay luces ni normales de verdad
+calculadas, solo un truco donde entre más alto (coordenada Y) está un
+punto, un poco más iluminado se ve. Es suficiente para que la escena no se
+vea toda plana, sin tener que montar un sistema de luces completo.
 
 **3. La cámara libre.** Es un estilo primera persona clásico: se guardan
 dos ángulos, yaw (izquierda/derecha) y pitch (arriba/abajo), y con eso se
@@ -109,6 +113,8 @@ curva de Bézier, la persona se recalcula con su ángulo de giro actual).
 galeria.cpp              -> todo el código del programa
 CMakeLists.txt           -> para compilar (agrega el target "galeria")
 libs/cgltf.h             -> librería para leer archivos .gltf
+libs/Shader.h            -> clase que carga/compila/linkea shaders desde archivo
+shaders/                 -> código GLSL de los shaders (color y textura)
 texturas/stb_image.h     -> librería para leer imágenes (png/jpg) como textura
 modelos/isla/            -> modelo de la isla + todas sus texturas
 modelos/flamenco/        -> modelo del flamenco + texturas
