@@ -19,6 +19,8 @@ find_package(glm REQUIRED)
 
 
 add_executable(prueba_opengl triangulo.cpp)
+add_executable(proyecto proyecto.cpp)
+add_executable(galeria galeria.cpp)
 
 target_link_libraries(prueba_opengl
     PRIVATE
@@ -31,7 +33,29 @@ target_link_libraries(prueba_opengl
 
 )
 
+target_link_libraries(proyecto
+    PRIVATE
+        glfw
+        glm::glm
+        OpenGL::GL
+        "-framework Cocoa"
+        "-framework IOKit"
+        "-framework CoreVideo"
+)
+
+target_link_libraries(galeria
+    PRIVATE
+        glfw
+        glm::glm
+        OpenGL::GL
+        "-framework Cocoa"
+        "-framework IOKit"
+        "-framework CoreVideo"
+)
+
 # Avisos utiles, no obligatorios.
 target_compile_options(prueba_opengl PRIVATE -Wall -Wextra)
+target_compile_options(proyecto PRIVATE -Wall -Wextra)
+target_compile_options(galeria PRIVATE -Wall -Wextra)
 
 message(STATUS "OpenGL encontrado: ${OPENGL_gl_LIBRARY}")
