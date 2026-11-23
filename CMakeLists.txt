@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(prueba_opengl LANGUAGES CXX)
+project(galeria LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,31 +17,7 @@ find_package(OpenGL REQUIRED)
 find_package(glfw3 3.3 REQUIRED)
 find_package(glm REQUIRED)
 
-
-add_executable(prueba_opengl triangulo.cpp)
-add_executable(proyecto proyecto.cpp)
 add_executable(galeria galeria.cpp)
-
-target_link_libraries(prueba_opengl
-    PRIVATE
-        glfw
-          glm::glm
-        OpenGL::GL
-        "-framework Cocoa"
-        "-framework IOKit"
-        "-framework CoreVideo"
-
-)
-
-target_link_libraries(proyecto
-    PRIVATE
-        glfw
-        glm::glm
-        OpenGL::GL
-        "-framework Cocoa"
-        "-framework IOKit"
-        "-framework CoreVideo"
-)
 
 target_link_libraries(galeria
     PRIVATE
@@ -54,8 +30,6 @@ target_link_libraries(galeria
 )
 
 # Avisos utiles, no obligatorios.
-target_compile_options(prueba_opengl PRIVATE -Wall -Wextra)
-target_compile_options(proyecto PRIVATE -Wall -Wextra)
 target_compile_options(galeria PRIVATE -Wall -Wextra)
 
 message(STATUS "OpenGL encontrado: ${OPENGL_gl_LIBRARY}")
