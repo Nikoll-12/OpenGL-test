@@ -47,7 +47,7 @@ galeria.cpp
     └── loop principal: lee teclado/mouse, mueve/rota lo que corresponde,
         y dibuja todo en cada frame
 
-### Explicación paso a paso
+ Explicación paso a paso
 
 **1. La ventana.** Lo primero que hace `main()` es crear la ventana con
 GLFW, pedir un contexto de OpenGL 3.3 "core", y activar el detector de
@@ -110,16 +110,5 @@ proyección, limpia la pantalla, y dibuja los 3 modelos uno por uno con su
 propia matriz de posición (la isla es fija, el flamenco se recalcula con la
 curva de Bézier, la persona se recalcula con su ángulo de giro actual).
 
-## Estructura de carpetas
-
-galeria.cpp              -> todo el código del programa
-CMakeLists.txt           -> para compilar (agrega el target "galeria")
-libs/cgltf.h             -> librería para leer archivos .gltf
-libs/Shader.h            -> clase que carga/compila/linkea shaders desde archivo
-shaders/                 -> código GLSL de los shaders (color y textura)
-texturas/stb_image.h     -> librería para leer imágenes (png/jpg) como textura
-modelos/isla/            -> modelo de la isla + todas sus texturas
-modelos/flamenco/        -> modelo del flamenco + texturas
-modelos/persona/         -> modelo de la persona + texturas
 
 
