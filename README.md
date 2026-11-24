@@ -67,14 +67,14 @@ calculadas, solo un truco donde entre más alto (coordenada Y) está un
 punto, un poco más iluminado se ve. Es suficiente para que la escena no se
 vea toda plana, sin tener que montar un sistema de luces completo.
 
-**3. La cámara libre.** Es un estilo primera persona clásico: se guardan
+**3. La cámara libre.** Es un estilo primera persona clásico usando las : se guardan
 dos ángulos, yaw (izquierda/derecha) y pitch (arriba/abajo), y con eso se
 calcula hacia dónde está mirando la cámara en cada frame. El mouse cambia
 esos ángulos (`mouse_callback`), y el teclado (WASD) mueve la posición hacia
 donde se está mirando (`procesarTeclado`). Las flechas del teclado hacen lo
 mismo que el mouse (rotar la vista), por si alguien prefiere no usar mouse.
 El único límite que se le puso es que no puede bajar del nivel del piso
-(`camPos.y < 0.3f`); aparte de eso no tiene techo ni paredes, para poder ver
+aparte de eso no tiene techo ni paredes, para poder ver
 la isla, el flamenco y la persona desde cualquier lugar.
 
 **4. El loader de glTF.** Los 3 modelos (isla, flamenco, persona) vienen en
