@@ -1,3 +1,5 @@
+Nikoll Alejandra Borja Mayorca - 6014390
+
 # Playa tropical con OpenGL 
 
 Proyecto de la materia de Computación Gráfica. La idea mi idea fue armar una escena 3D

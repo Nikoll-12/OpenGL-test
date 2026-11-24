@@ -8,7 +8,7 @@
 // ============================================================================
 #pragma once
 
-#include <OpenGL/gl3.h>
+#include "gl_loader.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <fstream>

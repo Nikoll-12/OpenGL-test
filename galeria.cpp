@@ -1,21 +1,7 @@
-// ============================================================================
-// galeria.cpp — Escena de playa tropical (curso de curvas de Bezier)
-// ============================================================================
-//  - Isla/playa (modelos/isla, modelo gltf con muchas texturas: arena, agua,
-//    rocas, palmeras y un skybox incluido) como escenario principal.
-//  - Un flamenco (modelos/flamenco) que vuela SOLO siguiendo una curva de
-//    Bezier cubica en 3D (De Casteljau), sobrevolando la isla.
-//  - Una persona (modelos/persona) parada en la playa que rota sobre su
-//    propio eje (sin animacion de huesos, solo una rotacion Y continua).
-//  - Camara libre en primera persona: mouse mueve la vista, WASD mueve la
-//    posicion, y las flechas del teclado tambien rotan la vista (ademas
-//    del mouse), para quien prefiera no usar el mouse.
-//
-// Sigue las mismas convenciones de Camara.cpp: GLFW + OpenGL 3.3 core,
-// cgltf para los modelos, stb_image para las texturas.
-// ============================================================================
 
+//Quita los warnings de OpenGL marcado como obsoleto en mac//
 #define GL_SILENCE_DEPRECATION
+//Activa el codigo real de la libreria cgltf (lee los modelos)//
 #define CGLTF_IMPLEMENTATION
 #include "libs/cgltf.h"
 #include <iostream>
@@ -23,31 +9,28 @@
 #include <string>
 #include <map>
 #include <cmath>
-#include <OpenGL/gl3.h>
+//Loader casero de funciones de OpenGL, reemplaza a GLAD//
+#include "libs/gl_loader.h"
+//Evita que GLFW incluya su propio OpenGL, ya lo trae el loader//
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+//Activa el codigo real de la libreria de imagenes//
 #define STB_IMAGE_IMPLEMENTATION
 #include "texturas/stb_image.h"
 
-// Los shaders ya no van como strings aqui adentro: el codigo GLSL vive en
-// archivos aparte dentro de shaders/ (color.vert, color.frag, textura.vert,
-// textura.frag), y la clase Shader (libs/Shader.h) se encarga de leerlos,
-// compilarlos y linkearlos. Asi quedan "por clases", como pidio el profe,
-// en vez de un monton de strings sueltos en medio de main().
+//Clase que carga y maneja los shaders//
 #include "libs/Shader.h"
 
+//Ajusta el area de dibujo cuando cambia el tamaño de la ventana//
 static void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     (void)window; glViewport(0, 0, width, height);
 }
 
-// ---------------------------------------------------------------------------
-// Camara libre: mouse mueve la vista, WASD mueve la posicion, y ADEMAS las
-// flechas del teclado tambien rotan la vista (igual que el mouse, para
-// quien prefiera no usarlo).
-
+//Posicion y direccion de la camara libre//
 glm::vec3 camPos(0.0f, 2.2f, 11.0f);
 glm::vec3 camFront(0.0f, 0.0f, -1.0f);
 glm::vec3 camUp(0.0f, 1.0f, 0.0f);
@@ -56,6 +39,7 @@ float camPitch = -10.0f;
 float lastMouseX = 500.0f, lastMouseY = 350.0f;
 bool primerMouse = true;
 
+//Convierte yaw y pitch en el vector hacia donde mira la camara//
 static void actualizarDireccionCamara() {
     glm::vec3 dir;
     dir.x = cos(glm::radians(camYaw)) * cos(glm::radians(camPitch));
@@ -64,6 +48,7 @@ static void actualizarDireccionCamara() {
     camFront = glm::normalize(dir);
 }
 
+//Mueve la vista de la camara segun el movimiento del mouse//
 static void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     (void)window;
     if (primerMouse) { lastMouseX = (float)xpos; lastMouseY = (float)ypos; primerMouse = false; }
@@ -79,6 +64,7 @@ static void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     actualizarDireccionCamara();
 }
 
+//Lee el teclado y mueve la camara (WASD, espacio, shift, flechas)//
 static void procesarTeclado(GLFWwindow* window, float deltaTime) {
     float velocidad = 4.0f * deltaTime;
     glm::vec3 adelante = glm::normalize(glm::vec3(camFront.x, 0.0f, camFront.z));
@@ -90,8 +76,7 @@ static void procesarTeclado(GLFWwindow* window, float deltaTime) {
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) camPos.y += velocidad;
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) camPos.y -= velocidad;
 
-    // las flechas tambien rotan la vista, igual que el mouse (por si no se
-    // quiere usar mouse para nada)
+    //Las flechas tambien rotan la vista, igual que el mouse//
     float giro = 60.0f * deltaTime;
     bool cambioVista = false;
     if (glfwGetKey(window, GLFW_KEY_LEFT)  == GLFW_PRESS) { camYaw -= giro; cambioVista = true; }
@@ -105,13 +90,11 @@ static void procesarTeclado(GLFWwindow* window, float deltaTime) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Curva de Bezier cubica en 3D (De Casteljau): usada para el vuelo del
-// flamenco, que vuela solo sobre la isla sin que la camara dependa de el.
-// ---------------------------------------------------------------------------
+//Interpolacion lineal entre dos puntos, usada para la curva de Bezier//
 static glm::vec3 lerp3(const glm::vec3& a, const glm::vec3& b, float t) {
     return a + (b - a) * t;
 }
+//Calcula un punto de la curva de Bezier cubica (De Casteljau)//
 static glm::vec3 evaluarBezierCubica(const glm::vec3& p0, const glm::vec3& p1,
                                       const glm::vec3& p2, const glm::vec3& p3, float t) {
     glm::vec3 a = lerp3(p0, p1, t);
@@ -122,13 +105,11 @@ static glm::vec3 evaluarBezierCubica(const glm::vec3& p0, const glm::vec3& p1,
     return lerp3(d, e, t);
 }
 
-// ---------------------------------------------------------------------------
-// Geometria con posicion+UV (sirve para cualquier pieza de modelos glTF,
-// con o sin textura: si no tiene textura, el shader de color simplemente
-// ignora el atributo UV).
-// ---------------------------------------------------------------------------
+
+//Vertice con posicion y coordenada de textura (UV)//
 struct VertexPU { GLfloat pos[3]; GLfloat uv[2]; };
 
+//Carga una imagen y la sube a la GPU como textura//
 GLuint loadTexture(const char* path) {
     GLuint textureID;
     glGenTextures(1, &textureID);
@@ -152,12 +133,14 @@ GLuint loadTexture(const char* path) {
     return textureID;
 }
 
+//Saca la carpeta de un path (para buscar texturas al lado del modelo)//
 static std::string dirDe(const std::string& path) {
     size_t p = path.find_last_of('/');
     if (p == std::string::npos) return "";
     return path.substr(0, p + 1);
 }
 
+//Reusa una textura ya cargada en vez de cargarla de nuevo//
 static GLuint loadTextureCached(const std::string& path, std::map<std::string, GLuint>& cache) {
     auto it = cache.find(path);
     if (it != cache.end()) return it->second;
@@ -166,10 +149,8 @@ static GLuint loadTextureCached(const std::string& path, std::map<std::string, G
     return id;
 }
 
-// ---------------------------------------------------------------------------
-// Una pieza (= una primitiva de un nodo) ya subida a la GPU, con su propia
-// textura (si el material la tiene) o un color de respaldo.
-// ---------------------------------------------------------------------------
+
+//Una pieza del modelo ya subida a la GPU (VAO/VBO/EBO) con su textura o color//
 struct GltfPart {
     GLuint vao = 0, vbo = 0, ebo = 0;
     GLsizei indexCount = 0;
@@ -178,6 +159,7 @@ struct GltfPart {
     glm::vec3 colorFallback = glm::vec3(0.75f);
 };
 
+//Un modelo completo: todas sus piezas, mas datos del tamaño/centro//
 struct GltfScene {
     std::vector<GltfPart> parts;
     glm::vec3 centro = glm::vec3(0.0f);
@@ -185,12 +167,7 @@ struct GltfScene {
     float mayorLado = 1.0f;
 };
 
-// Carga una escena glTF con VARIOS materiales/texturas (a diferencia de un
-// loader de "una sola malla"): cada primitiva de cada nodo con malla se
-// sube como su propia GltfPart, con su propia textura (baseColorTexture)
-// o un color plano de respaldo (baseColorFactor) si no tiene. Los nodos
-// con "skin" (animacion por huesos, usada aqui solo para follaje
-// secundario) se saltan porque no implementamos skinning.
+//Lee un archivo .gltf y sube todas sus piezas a la GPU//
 static bool loadGltfScene(const char* path, GltfScene& out, std::map<std::string, GLuint>& texCache,
                            const char* excluirNodo = nullptr) {
     cgltf_options options = {};
@@ -206,8 +183,10 @@ static bool loadGltfScene(const char* path, GltfScene& out, std::map<std::string
     std::string base = dirDe(path);
     glm::vec3 mn(1e30f), mx(-1e30f);
 
+    //Recorre cada nodo (pedazo) del modelo//
     for (cgltf_size ni = 0; ni < data->nodes_count; ni++) {
         cgltf_node* nodo = &data->nodes[ni];
+        //Se salta nodos sin malla o con animacion por huesos//
         if (nodo->mesh == NULL || nodo->skin != NULL) continue;
         if (excluirNodo != NULL && nodo->name != NULL && std::string(nodo->name) == excluirNodo) continue;
 
@@ -230,6 +209,7 @@ static bool loadGltfScene(const char* path, GltfScene& out, std::map<std::string
                 cgltf_accessor_unpack_floats(uv, rawUV.data(), rawUV.size());
             }
 
+            //Pasa cada vertice al espacio del mundo y guarda su UV//
             std::vector<VertexPU> verts(pos->count);
             for (cgltf_size i = 0; i < pos->count; i++) {
                 glm::vec4 p = nodeMat * glm::vec4(rawPos[i*3], rawPos[i*3+1], rawPos[i*3+2], 1.0f);
@@ -243,6 +223,7 @@ static bool loadGltfScene(const char* path, GltfScene& out, std::map<std::string
             std::vector<unsigned int> idx(prim->indices->count);
             cgltf_accessor_unpack_indices(prim->indices, idx.data(), sizeof(unsigned int), idx.size());
 
+            //Sube el VAO, VBO y EBO de esta pieza a la GPU//
             GltfPart part;
             glGenVertexArrays(1, &part.vao);
             glGenBuffers(1, &part.vbo);
@@ -259,6 +240,7 @@ static bool loadGltfScene(const char* path, GltfScene& out, std::map<std::string
             glBindVertexArray(0);
             part.indexCount = (GLsizei)idx.size();
 
+            //Busca la textura o el color del material//
             cgltf_material* mat = prim->material;
             if (mat != NULL && mat->has_pbr_metallic_roughness) {
                 auto& pbr = mat->pbr_metallic_roughness;
@@ -280,6 +262,7 @@ static bool loadGltfScene(const char* path, GltfScene& out, std::map<std::string
         cgltf_free(data); return false;
     }
 
+    //Calcula centro, altura minima y tamaño de todo el modelo//
     out.centro = (mn + mx) * 0.5f;
     out.minY = mn.y;
     glm::vec3 ext = mx - mn;
@@ -292,11 +275,8 @@ static bool loadGltfScene(const char* path, GltfScene& out, std::map<std::string
     return true;
 }
 
-// Dibuja todas las piezas de una escena con la misma matriz "model" (las
-// posiciones de cada pieza ya estan en el espacio local del archivo glTF,
-// por eso una sola matriz de ubicacion/escala alcanza para todo el modelo).
-// Recibe los dos shaders ya armados (color y textura) y elige cual usar
-// pieza por pieza, segun si esa pieza tiene textura o no.
+
+//Dibuja todas las piezas de un modelo, eligiendo shader segun tenga textura o no//
 static void dibujarGltfScene(const GltfScene& scene, const glm::mat4& model,
                               const Shader& shaderColor, const Shader& shaderTextura) {
     for (auto& part : scene.parts) {
@@ -317,6 +297,7 @@ static void dibujarGltfScene(const GltfScene& scene, const glm::mat4& model,
 }
 
 int main() {
+    //Crea la ventana con un contexto de OpenGL 3.3 core//
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -330,6 +311,15 @@ int main() {
         return -1;
     }
     glfwMakeContextCurrent(window);
+
+    //Pide las funciones de OpenGL con el loader casero//
+    if (!cargarGL()) {
+        std::cout << "No se pudieron cargar las funciones de OpenGL" << std::endl;
+        glfwTerminate();
+        return -1;
+    }
+
+    //Activa el mouse en modo camara y oculta el cursor//
     glfwFocusWindow(window);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwSetCursorPosCallback(window, mouse_callback);
@@ -339,58 +329,47 @@ int main() {
     glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
     glViewport(0, 0, fbWidth, fbHeight);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    //Activa el test de profundidad para que lo de adelante tape lo de atras//
     glEnable(GL_DEPTH_TEST);
 
-    // Un objeto Shader por cada par vertex/fragment: uno para piezas sin
-    // textura (color plano) y otro para piezas con textura.
+    //Un shader para piezas sin textura y otro para piezas con textura//
     Shader shaderColor("shaders/color.vert", "shaders/color.frag");
     Shader shaderTextura("shaders/textura.vert", "shaders/textura.frag");
 
     std::map<std::string, GLuint> texCache;
 
-    // ---- Isla/playa (escenario principal, con su propio skybox) ----
-    // El nodo "Skybox" del modelo se excluye: su textura no viene incluida
-    // en la descarga gratuita (falta el archivo) y su malla es una esfera
-    // gigante que inflaba la caja (bbox) de toda la isla. El cielo se hace
-    // con glClearColor (celeste de playa) en vez de ese skybox.
+    //Carga la isla y la escala/ancla al tamaño del mundo//
     GltfScene isla;
     bool okIsla = loadGltfScene("modelos/isla/Tropical_Sketchfab.gltf", isla, texCache, "Skybox");
-    const float ISLA_DIAMETRO = 22.0f; // tamaño final deseado en el mundo
+    const float ISLA_DIAMETRO = 22.0f; //Tamaño final de la isla en el mundo//
     float islaEscala = okIsla ? (ISLA_DIAMETRO / isla.mayorLado) : 1.0f;
-    // OJO: no usar isla.minY como ancla vertical. El minY global de la isla viene
-    // de rocas/acantilados muy por debajo de la arena (Aset_rock_assembly), no de
-    // la superficie caminable. La arena (nodo "Beach") esta cerca de y=0 a 0.16
-    // en el espacio nativo del modelo, asi que usamos ese valor como "piso real".
-    const float ISLA_SUELO_NATIVO = 0.1f;
+
+    const float ISLA_SUELO_NATIVO = 0.1f; //Nivel de la arena en el modelo original//
     glm::vec3 islaAncla = okIsla ? glm::vec3(isla.centro.x, ISLA_SUELO_NATIVO, isla.centro.z) : glm::vec3(0.0f);
     glm::mat4 islaModel = glm::scale(glm::mat4(1.0f), glm::vec3(islaEscala))
                          * glm::translate(glm::mat4(1.0f), -islaAncla);
 
-    // ---- Flamenco (vuela solo por una curva de Bezier) ----
+    //Carga el flamenco y lo escala a su tamaño//
     GltfScene flamenco;
     bool okFlamenco = loadGltfScene("modelos/flamenco/scene.gltf", flamenco, texCache);
     const float FLAMENCO_TAMANO = 1.6f;
     float flamencoEscala = okFlamenco ? (FLAMENCO_TAMANO / flamenco.mayorLado) : 1.0f;
     glm::vec3 flamencoAncla = okFlamenco ? flamenco.centro : glm::vec3(0.0f);
 
-    // ---- Persona (parada en la playa, rota sobre su propio eje) ----
+    //Carga la persona y la ubica parada junto a las palmeras//
     GltfScene persona;
     bool okPersona = loadGltfScene("modelos/persona/scene.gltf", persona, texCache);
     const float PERSONA_ALTURA = 1.75f;
     float personaEscala = okPersona ? (PERSONA_ALTURA / persona.mayorLado) : 1.0f;
     glm::vec3 personaAncla = okPersona ? glm::vec3(persona.centro.x, persona.minY, persona.centro.z) : glm::vec3(0.0f);
-    // Ubicacion de la muñeca: justo en el grupo de palmeras ("Palme"), que es el
-    // centro real de la isla donde esta toda la vegetacion. Coordenada tomada en
-    // el espacio nativo del modelo (antes de aplicar la escala/ancla de la isla)
-    // y convertida a espacio de mundo con la misma formula que usa islaModel:
-    // mundo = (nativo - islaAncla) * islaEscala.
+
     glm::vec3 personaNativa(-0.6f, ISLA_SUELO_NATIVO, -0.4f);
     glm::vec3 personaPos = okIsla ? (personaNativa - islaAncla) * islaEscala
                                    : glm::vec3(3.0f, 0.0f, 6.0f);
     float personaAngulo = 0.0f;
-    const float PERSONA_VELOCIDAD_GIRO = 35.0f; // grados por segundo
+    const float PERSONA_VELOCIDAD_GIRO = 35.0f; //Grados por segundo que gira//
 
-    // ---- Curva de Bezier cubica en 3D: el camino del flamenco sobre la isla ----
+    //Los 4 puntos de control de la curva de Bezier (vuelo del flamenco)//
     glm::vec3 bezierP0(-9.0f, 6.5f,  7.0f);
     glm::vec3 bezierP1(-9.0f, 8.0f, -7.0f);
     glm::vec3 bezierP2( 9.0f, 7.0f, -7.0f);
@@ -398,20 +377,21 @@ int main() {
 
     float vueloT = 0.0f;
     float vueloDir = 1.0f;
-    const float VELOCIDAD_VUELO = 0.08f; // fraccion de la curva por segundo (va y vuelve)
+    const float VELOCIDAD_VUELO = 0.08f; //Que tan rapido recorre la curva//
 
     float lastFrame = 0.0f;
 
+    //Loop principal: se repite una vez por cada frame//
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = (float)glfwGetTime();
         float deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
         procesarTeclado(window, deltaTime);
-        // Unico limite de la camara: el piso (no se puede bajar del nivel del
-        // suelo). No hay techo ni limites de pared/habitacion a proposito.
+        //Unico limite de la camara: no bajar del piso//
         if (camPos.y < 0.3f) camPos.y = 0.3f;
 
+        //Matrices de vista y proyeccion segun la camara actual//
         glm::mat4 view = glm::lookAt(camPos, camPos + camFront, camUp);
 
         int width, height;
@@ -419,10 +399,11 @@ int main() {
         float aspect = height > 0 ? (float)width / (float)height : 1.0f;
         glm::mat4 projection = glm::perspective(glm::radians(65.0f), aspect, 0.05f, 200.0f);
 
-        // cielo de playa: celeste claro
+        //Limpia la pantalla con el color del cielo//
         glClearColor(0.55f, 0.80f, 0.94f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        //Manda la camara a los dos shaders//
         shaderColor.usar();
         shaderColor.setMat4("view", view);
         shaderColor.setMat4("projection", projection);
@@ -430,16 +411,17 @@ int main() {
         shaderTextura.setMat4("view", view);
         shaderTextura.setMat4("projection", projection);
 
-        // isla/playa
+        //Dibuja la isla, es fija y no se mueve//
         if (okIsla) dibujarGltfScene(isla, islaModel, shaderColor, shaderTextura);
 
-        // flamenco: avanza por la curva de Bezier (ida y vuelta)
+        //Mueve el flamenco por la curva de Bezier (ida y vuelta)//
         if (okFlamenco) {
             vueloT += vueloDir * VELOCIDAD_VUELO * deltaTime;
             if (vueloT > 1.0f) { vueloT = 1.0f; vueloDir = -1.0f; }
             if (vueloT < 0.0f) { vueloT = 0.0f; vueloDir = 1.0f; }
 
             glm::vec3 posVuelo = evaluarBezierCubica(bezierP0, bezierP1, bezierP2, bezierP3, vueloT);
+            //Calcula hacia donde mira el flamenco usando un punto mas adelante en la curva//
             float tAdelante = glm::clamp(vueloT + vueloDir * 0.01f, 0.0f, 1.0f);
             glm::vec3 puntoAdelante = evaluarBezierCubica(bezierP0, bezierP1, bezierP2, bezierP3, tAdelante);
             glm::vec3 dirVuelo = puntoAdelante - posVuelo;
@@ -454,7 +436,7 @@ int main() {
             dibujarGltfScene(flamenco, flamencoModel, shaderColor, shaderTextura);
         }
 
-        // persona: rota sobre su propio eje, parada en la playa
+        //Gira la persona sobre su propio eje//
         if (okPersona) {
             personaAngulo += PERSONA_VELOCIDAD_GIRO * deltaTime;
             glm::mat4 personaModel = glm::translate(glm::mat4(1.0f), personaPos)
@@ -464,9 +446,11 @@ int main() {
             dibujarGltfScene(persona, personaModel, shaderColor, shaderTextura);
         }
 
+        //Muestra el frame y revisa teclado/mouse/ventana//
         glfwSwapBuffers(window);
         glfwPollEvents();
 
+        //Cierra la ventana si se presiona ESC//
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window, true);
     }
 
